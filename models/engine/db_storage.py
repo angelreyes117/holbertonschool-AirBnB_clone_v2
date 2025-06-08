@@ -1,72 +1,65 @@
 #!/usr/bin/python3
-from os import getenv
-from sqlalchemy import create_engine, inspect, MetaData
-from sqlalchemy.orm import sessionmaker, scoped_session
-from models.base_model import Base, BaseModel
-from models import city, place, review, state, amenity, user
+"""This module defines the DBStorage class."""
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, scoped_session
+from sqlalchemy.orm.session import Session
+from os import getenv
+
+from models.base_model import Base
+from models.state import State
+from models.city import City
 
 class DBStorage:
+    """Interacts with the MySQL database using SQLAlchemy ORM."""
+
     __engine = None
     __session = None
-    CDIC = {
-        'City': city.City,
-        'Place': place.Place,
-        'Review': review.Review,
-        'State': state.State,
-        'Amenity': amenity.Amenity,
-        'User': user.User
-    }
 
     def __init__(self):
-        self.__engine = create_engine("mysql+mysqldb://{}:{}@{}/{}".format(
-                                            getenv('HBNB_MYSQL_USER'),
-                                            getenv('HBNB_MYSQL_PWD'),
-                                            getenv('HBNB_MYSQL_HOST'),
-                                            getenv('HBNB_MYSQL_DB')),
-                                      pool_pre_ping=True)
+        """Instantiate a DBStorage object."""
+        user = getenv("HBNB_MYSQL_USER")
+        pwd = getenv("HBNB_MYSQL_PWD")
+        host = getenv("HBNB_MYSQL_HOST")
+        db = getenv("HBNB_MYSQL_DB")
 
-    def reload(self):
-        Base.metadata.create_all(self.__engine)
-        the_session = sessionmaker(bind=self.__engine, expire_on_commit=False)
-        Session = scoped_session(the_session)
-        self.__session = Session()
+        self.__engine = create_engine(f'mysql+mysqldb://{user}:{pwd}@{host}/{db}', pool_pre_ping=True)
+
+    def all(self, cls=None):
+        """Query on the current database session all objects of the given class.
+        If cls is None, queries all types of objects."""
+        obj_dict = {}
+        classes = [State, City]
+
+        if cls:
+            classes = [cls]
+
+        for class_ in classes:
+            results = self.__session.query(class_).all()
+            for obj in results:
+                key = f"{obj.__class__.__name__}.{obj.id}"
+                obj_dict[key] = obj
+        return obj_dict
 
     def new(self, obj):
+        """Add the object to the current database session."""
         self.__session.add(obj)
 
     def save(self):
+        """Commit all changes of the current database session."""
         self.__session.commit()
 
     def delete(self, obj=None):
-        if obj is not None:
+        """Delete obj from the current database session if not None."""
+        if obj:
             self.__session.delete(obj)
 
-    def all(self, cls=None):
-        obj_dct = {}
-        qry = []
-        if cls is None:
-            for cls_typ in DBStorage.CDIC.values():
-                qry.extend(self.__session.query(cls_typ).all())
-        else:
-            if cls in self.CDIC.keys():
-                cls = self.CDIC.get(cls)
-            qry = self.__session.query(cls)
-        for obj in qry:
-            obj_key = "{}.{}".format(type(obj).__name__, obj.id)
-            obj_dct[obj_key] = obj
-        return obj_dct
-
-    def gettables(self):
-        inspector = inspect(self.__engine)
-        return inspector.get_table_names()
+    def reload(self):
+        """Create all tables in the database and initialize a new session."""
+        Base.metadata.create_all(self.__engine)
+        session_factory = sessionmaker(bind=self.__engine, expire_on_commit=False)
+        self.__session = scoped_session(session_factory)
 
     def close(self):
-        self.__session.close()
-
-    def hcf(self, cls):
-        metadata = MetaData()
-        metadata.reflect(bind=self.__engine)
-        table = metadata.tables.get(cls.__tablename__)
-        self.__session.execute(table.delete())
-        self.save()
+        """Call remove() method on the private session attribute."""
+        self.__session.remove()
