@@ -2,14 +2,14 @@
 """
 State model
 """
+import os
 from sqlalchemy import Column, String
 from sqlalchemy.orm import relationship
 from models.base_model import BaseModel, Base
-import os
 
 
 class State(BaseModel, Base):
-    """State: name + relation to City"""
+    """State: holds name and relationship to City."""
     __tablename__ = 'states'
 
     name = Column(String(128), nullable=False)
@@ -19,8 +19,12 @@ class State(BaseModel, Base):
     else:
         @property
         def cities(self):
-            """FileStorage: return list of City instances with state_id == me.id"""
+            """
+            FileStorage getter: return list of City instances
+            where city.state_id == this State’s id.
+            """
             from models import storage
             from models.city import City
             return [c for c in storage.all(City).values()
                     if c.state_id == self.id]
+
