@@ -1,77 +1,72 @@
 #!/usr/bin/python3
-"""
-DBStorage engine: uses SQLAlchemy ORM to interface with MySQL.
-"""
-import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import scoped_session, sessionmaker
+from os import getenv
+from sqlalchemy import create_engine, inspect, MetaData
+from sqlalchemy.orm import sessionmaker, scoped_session
 from models.base_model import Base, BaseModel
-
-# import models so that they get registered on Base.metadata
-from models.user import User
-from models.state import State
-from models.city import City
-from models.amenity import Amenity
-from models.place import Place
-from models.review import Review
+from models import city, place, review, state, amenity, user
 
 
 class DBStorage:
-    """Manages persistence in a MySQL database via SQLAlchemy."""
-
     __engine = None
     __session = None
+    CDIC = {
+        'City': city.City,
+        'Place': place.Place,
+        'Review': review.Review,
+        'State': state.State,
+        'Amenity': amenity.Amenity,
+        'User': user.User
+    }
 
     def __init__(self):
-        """Create the engine using HBNB_MYSQL_* environment variables."""
-        user = os.getenv('HBNB_MYSQL_USER')
-        pwd = os.getenv('HBNB_MYSQL_PWD')
-        host = os.getenv('HBNB_MYSQL_HOST')
-        db = os.getenv('HBNB_MYSQL_DB')
-        uri = f"mysql+mysqldb://{user}:{pwd}@{host}/{db}"
-        self.__engine = create_engine(uri, pool_pre_ping=True)
+        self.__engine = create_engine("mysql+mysqldb://{}:{}@{}/{}".format(
+                                            getenv('HBNB_MYSQL_USER'),
+                                            getenv('HBNB_MYSQL_PWD'),
+                                            getenv('HBNB_MYSQL_HOST'),
+                                            getenv('HBNB_MYSQL_DB')),
+                                      pool_pre_ping=True)
 
-    def all(self, cls=None):
-        """
-        Query on the current database session all objects of type cls,
-        or all types if cls is None.
-        """
-        objs = {}
-        if cls:
-            query = self.__session.query(cls).all()
-            for obj in query:
-                key = f"{obj.__class__.__name__}.{obj.id}"
-                objs[key] = obj
-        else:
-            for model in (User, State, City, Amenity, Place, Review):
-                for obj in self.__session.query(model).all():
-                    key = f"{obj.__class__.__name__}.{obj.id}"
-                    objs[key] = obj
-        return objs
+    def reload(self):
+        Base.metadata.create_all(self.__engine)
+        the_session = sessionmaker(bind=self.__engine, expire_on_commit=False)
+        Session = scoped_session(the_session)
+        self.__session = Session()
 
     def new(self, obj):
-        """Add obj to the current database session."""
         self.__session.add(obj)
 
     def save(self):
-        """Commit all changes of the current database session."""
         self.__session.commit()
 
     def delete(self, obj=None):
-        """Delete obj from the current database session if not None."""
-        if obj:
+        if obj is not None:
             self.__session.delete(obj)
 
-    def reload(self):
-        """Create all tables and initialize a scoped session."""
-        Base.metadata.create_all(self.__engine)
-        factory = sessionmaker(bind=self.__engine, expire_on_commit=False)
-        Session = scoped_session(factory)
-        self.__session = Session()
+    def all(self, cls=None):
+        obj_dct = {}
+        qry = []
+        if cls is None:
+            for cls_typ in DBStorage.CDIC.values():
+                qry.extend(self.__session.query(cls_typ).all())
+        else:
+            if cls in self.CDIC.keys():
+                cls = self.CDIC.get(cls)
+            qry = self.__session.query(cls)
+        for obj in qry:
+            obj_key = "{}.{}".format(type(obj).__name__, obj.id)
+            obj_dct[obj_key] = obj
+        return obj_dct
+
+    def gettables(self):
+        inspector = inspect(self.__engine)
+        return inspector.get_table_names()
 
     def close(self):
-        """
-        Called on Flask teardown: remove() will close the session
-        and ensure new sessions are fresh.
-        """
-        self.__session.remove()
+        self.__session.close()
+
+    def hcf(self, cls):
+        metadata = MetaData()
+        metadata.reflect(bind=self.__engine)
+        table = metadata.tables.get(cls.__tablename__)
+        self.__session.execute(table.delete())
+        self.save()

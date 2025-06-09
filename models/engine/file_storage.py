@@ -1,63 +1,79 @@
 #!/usr/bin/python3
-"""
-FileStorage engine: serializes to JSON and deserializes back.
-"""
+"""This module defines a class to manage file storage for hbnb clone"""
 import json
-from models.base_model import BaseModel
-from models.user import User
-from models.state import State
-from models.city import City
-from models.amenity import Amenity
-from models.place import Place
-from models.review import Review
+from models import city, place, review, state, amenity, user, base_model
 
 
 class FileStorage:
-    """Serializes instances to a JSON file and deserializes back."""
-
+    """This class manages storage of hbnb models in JSON format"""
     __file_path = 'file.json'
     __objects = {}
+    CDIC = {
+        'City': city.City,
+        'Place': place.Place,
+        'Review': review.Review,
+        'State': state.State,
+        'Amenity': amenity.Amenity,
+        'User': user.User
+    }
 
     def all(self, cls=None):
-        """
-        Return all objects, or only those of type cls if given.
-        """
-        if cls:
-            return {k: v for k, v in self.__objects.items()
-                    if isinstance(v, cls)}
+        """Returns a dictionary of models currently in storage
+        if cls specified, only returns that class"""
+        if cls is not None:
+            if cls in self.CDIC.keys():
+                cls = self.CDIC.get(cls)
+            spec_rich = {}
+            for ky, vl in self.__objects.items():
+                if cls == type(vl):
+                    spec_rich[ky] = vl
+            return spec_rich
         return self.__objects
 
     def new(self, obj):
-        """Add new object to storage dictionary."""
-        key = f"{obj.__class__.__name__}.{obj.id}"
-        self.__objects[key] = obj
+        """Adds new object to storage dictionary"""
+        self.all().update({obj.to_dict()['__class__'] + '.' + obj.id: obj})
 
     def save(self):
-        """Serialize __objects to the JSON file."""
-        with open(self.__file_path, 'w', encoding='utf-8') as f:
-            json.dump({k: v.to_dict() for k, v in self.__objects.items()}, f)
+        """Saves storage dictionary to file"""
+        with open(FileStorage.__file_path, 'w') as f:
+            temp = {}
+            temp.update(FileStorage.__objects)
+            for key, val in temp.items():
+                temp[key] = val.to_dict()
+            json.dump(temp, f)
 
     def reload(self):
-        """Deserialize the JSON file to __objects, if it exists."""
+        """Loads storage dictionary from file"""
+        from models.base_model import BaseModel
+        from models.user import User
+        from models.place import Place
+        from models.state import State
+        from models.city import City
+        from models.amenity import Amenity
+        from models.review import Review
+
+        classes = {
+                    'BaseModel': BaseModel, 'User': User, 'Place': Place,
+                    'State': State, 'City': City, 'Amenity': Amenity,
+                    'Review': Review
+                  }
         try:
-            with open(self.__file_path, 'r', encoding='utf-8') as f:
-                all_dicts = json.load(f)
-            for obj_data in all_dicts.values():
-                cls_name = obj_data['__class__']
-                obj = eval(f"{cls_name}(**obj_data)")
-                self.__objects[f"{cls_name}.{obj.id}"] = obj
+            temp = {}
+            with open(FileStorage.__file_path, 'r') as f:
+                temp = json.load(f)
+                for key, val in temp.items():
+                    self.all()[key] = classes[val['__class__']](**val)
         except FileNotFoundError:
             pass
 
     def delete(self, obj=None):
-        """Delete obj from __objects if it exists."""
-        if obj:
-            key = f"{obj.__class__.__name__}.{obj.id}"
-            self.__objects.pop(key, None)
+        """if obj deletes obj from __objects"""
+        try:
+            key = obj.__class__.__name__ + "." + obj.id
+            del self.__objects[key]
+        except (AttributeError, KeyError):
+            pass
 
     def close(self):
-        """
-        Called on Flask teardown: ensures __objects is reloaded
-        (so that new JSON changes are seen).
-        """
         self.reload()
