@@ -1,26 +1,32 @@
 #!/usr/bin/python3
 """
-flask model
+You must use storage for fetching data from
+the storage engine (FileStorage or DBStorage) =>
+from models import storage and storage.all(...)
 """
-from flask import Flask, render_template
 from models import storage
-from models.state import State
+from flask import render_template, Flask
+
 app = Flask(__name__)
 
 
-@app.teardown_appcontext
-def teardown_data(self):
+@app.route("/states_list", strict_slashes=False)
+def states_list():
     """
-        refrech data
+    /states_list: display a HTML page: (inside the tag BODY)
+    """
+    states = storage.all('State')
+    return render_template("7-states_list.html", states=states)
+
+
+@app.teardown_appcontext
+def teardown(exc):
+    """
+    After each request you must remove the current SQLAlchemy Session:
+    Declare a method to handle @app.teardown_appcontext
+    Call in this method storage.close()
     """
     storage.close()
-
-
-@app.route('/states_list', strict_slashes=False)
-def states_list():
-    """ return all states in the db  """
-    states = storage.all(State)
-    return render_template('7-states_list.html', states=states)
 
 
 if __name__ == "__main__":
