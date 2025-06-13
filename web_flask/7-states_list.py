@@ -1,22 +1,24 @@
 #!/usr/bin/python3
-""" Flask app that lists states """
+""" Script that starts a Flask web application """
 from flask import Flask, render_template
-from models import storage
-from models.state import State
+import models
 
 app = Flask(__name__)
+app.url_map.strict_slashes = False
+
 
 @app.teardown_appcontext
-def teardown(exception):
-    """Remove current SQLAlchemy Session"""
-    storage.close()
+def teardown(content):
+    """ removes current SQLAlchemy sesh """
+    models.storage.close()
 
-@app.route('/states_list', strict_slashes=False)
+
+@app.route('/states_list')
 def states_list():
-    """Display HTML page with list of states"""
-    states = storage.all(State)
-    states_sorted = sorted(states.values(), key=lambda state: state.name)
-    return render_template('7-states_list.html', states=states_sorted)
+    """ prints list of states """
+    states = models.storage.all(models.state.State)
+    return render_template('7-states_list.html', states=states)
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
