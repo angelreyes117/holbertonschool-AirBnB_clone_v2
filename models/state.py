@@ -17,14 +17,18 @@ class State(BaseModel, Base):
     __tablename__ = 'states'
     if storage_type == 'db':
         name = Column(String(128), nullable=False)
-        cities = relationship("City", backref="state", cascade="all, delete-orphan")
+        cities = relationship(
+            "City",
+            backref="state",
+            cascade="all, delete-orphan"
+        )
     else:
         name = ""
 
     if storage_type != 'db':
         @property
         def cities(self):
-            """Returns list of City instances with state_id equal to current State id"""
+            """Returns list of City instances with state_id equal to current"""
             from models.city import City
             city_list = []
             all_cities = models.storage.all(City).values()
